@@ -38,8 +38,10 @@ Use Cursor's multi-tab feature to open these simultaneously:
 3. **JSON Payload Tab**: `input/payloads/{form_name}.json`
    - Use Cursor's JSON formatter for better readability
 
-4. **Example Tab**: Open one file from `Example_form_mappings/`
-   - Reference for ERB syntax patterns
+4. **Example Tabs**: Open ALL files from `Example_form_mappings/`
+   - **MANDATORY**: Review ALL three examples (vba_21_10210.json.erb, vba_21_4140.json.erb, vba_21_4142.json.erb)
+   - Study how they use `form.data.dig()` vs `form.signature_date`
+   - Copy their exact patterns for character limits, conditionals, and radio buttons
 
 ### Step 2: Analyze with Cursor's Search
 
@@ -49,11 +51,25 @@ Use Cmd/Ctrl+F in the keys file to find:
 - `FieldType: Button` - Radio buttons/checkboxes
 - `FieldStateOption:` - Valid values (YES/NO/Off)
 
-### Step 3: Create Your Mapping File
+### Step 3: Study ALL Examples First (CRITICAL)
+
+Before creating your mapping, open and study ALL three example files:
+- `Example_form_mappings/vba_21_10210.json.erb`
+- `Example_form_mappings/vba_21_4140.json.erb`
+- `Example_form_mappings/vba_21_4142.json.erb`
+
+Use Cursor's search (Cmd/Ctrl+F) in the examples to find:
+- `form.data` - How they access JSON data
+- `form.signature_date` - When they use this vs data hash
+- `&.[](` - Character limit patterns
+- `<% if` - Conditional patterns
+- `? 1 : 0` or `? 'YES' : 'NO'` - Boolean/radio patterns
+
+### Step 4: Create Your Mapping File
 
 Create new file: `output/form_mappings/{form_name}.erb`
 
-#### ERB Template with Best Practices
+#### ERB Template with Best Practices (Based on ALL Examples)
 
 ```erb
 {

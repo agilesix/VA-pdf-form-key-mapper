@@ -33,7 +33,10 @@ cat output/extracted_keys/{form_name}_keys.txt | grep -A1 -B1 "FieldNameAlt"
    - IMPORTANT: View this to understand the form's actual layout
 
 4. **Example Mappings**: `Example_form_mappings/*.erb`
-   - Reference these for proper ERB syntax and patterns
+   - **CRITICAL**: Review ALL example files (vba_21_10210.json.erb, vba_21_4140.json.erb, vba_21_4142.json.erb)
+   - Study how they handle form.data vs form.signature_date
+   - Learn conditional patterns and safe navigation
+   - Copy their exact ERB syntax patterns
 
 ## Step-by-Step Process
 
@@ -81,20 +84,36 @@ cat input/payloads/{form_name}.json | python -m json.tool
 jq . input/payloads/{form_name}.json
 ```
 
-### 4. Study Example Patterns
+### 4. Study ALL Example Patterns (MANDATORY)
 
-Review examples for common patterns:
+**You MUST review ALL three example files** to understand the correct patterns:
 
 ```bash
-# Look at how other forms handle similar structures
+# List all example files - review EACH one
+ls -la Example_form_mappings/
+# vba_21_10210.json.erb
+# vba_21_4140.json.erb
+# vba_21_4142.json.erb
+
+# Study each example thoroughly
+cat Example_form_mappings/vba_21_10210.json.erb
+cat Example_form_mappings/vba_21_4140.json.erb
+cat Example_form_mappings/vba_21_4142.json.erb
+
+# Look for common patterns across ALL examples
 grep -n "form.data" Example_form_mappings/*.erb
-
-# Check radio button handling
+grep -n "form.signature_date" Example_form_mappings/*.erb
 grep -n "RadioButtonList" Example_form_mappings/*.erb
-
-# See date formatting patterns
-grep -n "strftime" Example_form_mappings/*.erb
+grep -n "&\.\[\]" Example_form_mappings/*.erb  # Character limit patterns
+grep -n "present?" Example_form_mappings/*.erb  # Conditional checks
 ```
+
+Key patterns to extract from the examples:
+- How they use `form.data.dig()` for nested data
+- When they use `form.signature_date` vs `form.data['signatureDate']`
+- How they handle character limits with `&.[](0..n)`
+- Conditional field population patterns
+- Radio button value formatting
 
 ### 5. Generate the ERB Mapping
 

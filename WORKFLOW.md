@@ -102,7 +102,12 @@ CRITICAL REQUIREMENTS:
    - DO NOT trust field names like VeteransLastName[0]
 2. Review the actual PDF at input/pdfs/tax_form_2024.pdf to understand form structure
 3. Map fields from input/payloads/tax_form_2024.json
-4. Reference examples in Example_form_mappings/ for ERB syntax
+4. **MANDATORY: Review ALL three example files in Example_form_mappings/**
+   - vba_21_10210.json.erb
+   - vba_21_4140.json.erb
+   - vba_21_4142.json.erb
+   - Study their patterns for form.data vs form.signature_date
+   - Copy their exact ERB syntax
 5. Enforce character limits found in FieldMaxLength
 6. Use YES/NO/Off for radio buttons, not 1/0
 7. Handle conditional fields properly
@@ -118,7 +123,10 @@ Remember: FieldNameAlt tells you the REAL purpose of each field!
    - `output/extracted_keys/tax_form_2024_keys.txt` (CRITICAL!)
    - `input/payloads/tax_form_2024.json`
    - `input/pdfs/tax_form_2024.pdf` (in external viewer)
-   - An example from `Example_form_mappings/`
+   - **ALL three examples from `Example_form_mappings/`** (MANDATORY)
+     - vba_21_10210.json.erb
+     - vba_21_4140.json.erb
+     - vba_21_4142.json.erb
 3. Create: `output/form_mappings/tax_form_2024.erb`
 4. Use Cursor's AI with the requirements above
 
