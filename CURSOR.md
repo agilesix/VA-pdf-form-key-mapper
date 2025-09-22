@@ -4,215 +4,223 @@
 
 Generate an ERB form mapping file that connects frontend JSON payload fields to PDF form field keys.
 
+## ⚠️ CRITICAL WARNING: Field Names Are Deceptive!
+
+**The #1 mistake**: Trusting PDF field names! A field named `VeteransLastName[0]` might actually be for the spouse's name or even an email address field. **ALWAYS check FieldNameAlt descriptions!**
+
 ## Project Structure Overview
 
 ```
 Key_Mapping/
 ├── input/
-│   ├── pdfs/          → PDF forms (already processed)
+│   ├── pdfs/          → PDF forms (VIEW THESE!)
 │   └── payloads/      → JSON payloads from frontend
 ├── output/
-│   ├── extracted_keys/ → PDF field keys (from pdftk)
+│   ├── extracted_keys/ → PDF field keys with FieldNameAlt descriptions
 │   └── form_mappings/  → Your generated ERB files go here
 └── Example_form_mappings/ → Reference examples
 ```
 
-## Step-by-Step Instructions
+## Step-by-Step Instructions with Cursor
 
-### Step 1: Identify the Form to Process
+### Step 1: Open All Relevant Files
 
-Look for matching files:
-- PDF keys: `output/extracted_keys/{name}_keys_names_only.txt`
-- JSON payload: `input/payloads/{name}.json`
+Use Cursor's multi-tab feature to open these simultaneously:
 
-### Step 2: Analyze the Data
+1. **PDF Viewer Tab**: Open `input/pdfs/{form_name}.pdf`
+   - Use external PDF viewer if Cursor can't display
+   - Keep this visible to understand form structure
 
-1. **Open the PDF field names file**:
-   - Navigate to `output/extracted_keys/`
-   - Open `{form_name}_keys_names_only.txt`
-   - This contains all PDF form field names
+2. **Full Keys File Tab**: `output/extracted_keys/{form_name}_keys.txt`
+   - This contains the CRITICAL FieldNameAlt descriptions
+   - Search for "FieldNameAlt" to see actual field purposes
 
-2. **Open the JSON payload**:
-   - Navigate to `input/payloads/`
-   - Open `{form_name}.json`
-   - Understand the data structure
+3. **JSON Payload Tab**: `input/payloads/{form_name}.json`
+   - Use Cursor's JSON formatter for better readability
 
-3. **Study the examples**:
-   - Open files in `Example_form_mappings/`
-   - Note the ERB syntax patterns
+4. **Example Tab**: Open one file from `Example_form_mappings/`
+   - Reference for ERB syntax patterns
 
-### Step 3: Create the Mapping
+### Step 2: Analyze with Cursor's Search
 
-Create a new file: `output/form_mappings/{form_name}.erb`
+Use Cmd/Ctrl+F in the keys file to find:
+- `FieldNameAlt:` - Shows the TRUE purpose of each field
+- `FieldMaxLength:` - Character limits you must enforce
+- `FieldType: Button` - Radio buttons/checkboxes
+- `FieldStateOption:` - Valid values (YES/NO/Off)
 
-#### Basic ERB Template Structure
+### Step 3: Create Your Mapping File
+
+Create new file: `output/form_mappings/{form_name}.erb`
+
+#### ERB Template with Best Practices
 
 ```erb
-<%# Form: {Form Name} %>
-<%# Description: Maps {form name} JSON payload to PDF fields %>
-<%# Generated: <%= Date.today %> %>
+{
+  <%# Form: {Form Number} - {Form Title} %>
+  <%# Generated: <%= Date.today %> %>
+  <%# ================================================ %>
+  <%# IMPORTANT: Field names are misleading! %>
+  <%# Always check FieldNameAlt for actual purpose! %>
+  <%# ================================================ %>
 
-<%# ============================================ %>
-<%# Personal Information Section %>
-<%# ============================================ %>
+  <%# Page 1 - {Section from PDF} %>
 
-<%= pdf_field "FirstName", json_data["first_name"] %>
-<%= pdf_field "LastName", json_data["last_name"] %>
-<%= pdf_field "Email", json_data["email"] %>
+  <%# ACTUAL PURPOSE from FieldNameAlt (not field name!) %>
+  "misleadingFieldName[0]": "<%= form.data.dig('correct', 'json', 'path') %>",
 
-<%# ============================================ %>
-<%# Address Information %>
-<%# ============================================ %>
+  <%# Handle character limits %>
+  "SomeField[0]": "<%= form.data['field']&.[](0..17) %>", <%# Max 18 chars %>
 
-<% if json_data["address"].present? %>
-  <%= pdf_field "Street", json_data["address"]["street"] %>
-  <%= pdf_field "City", json_data["address"]["city"] %>
-  <%= pdf_field "State", json_data["address"]["state"] %>
-  <%= pdf_field "ZipCode", json_data["address"]["zip"] %>
-<% end %>
+  <%# Radio buttons - use state options, not 0/1 %>
+  "RadioButtonList[0]": "<%= form.data['condition'] ? 'YES' : 'NO' %>",
 
-<%# ============================================ %>
-<%# Dynamic Lists (e.g., dependents, items) %>
-<%# ============================================ %>
+  <%# Conditional sections %>
+  <% if form.data['hasRemarried'] %>
+    <%# Only populate if condition is true %>
+    "ConditionalField[0]": "<%= form.data.dig('remarriage', 'data') %>",
+  <% else %>
+    <%# Leave empty or use "Off" for radio buttons %>
+    "ConditionalField[0]": "",
+    "RadioButton[0]": "Off",
+  <% end %>
 
-<% (json_data["dependents"] || []).each_with_index do |dep, i| %>
-  <%= pdf_field "Dependent#{i+1}Name", dep["name"] %>
-  <%= pdf_field "Dependent#{i+1}DOB", dep["date_of_birth"] %>
-<% end %>
+  <%# Signature dates use form object directly %>
+  "DateMonth[0]": "<%= form.signature_date&.strftime('%m') %>",
+  "DateDay[0]": "<%= form.signature_date&.strftime('%d') %>",
+  "DateYear[0]": "<%= form.signature_date&.strftime('%Y') %>"
+}
 ```
 
-### Step 4: Mapping Strategies
+### Step 4: Common Field Mapping Gotchas
 
-#### Direct Mapping
-When JSON field names closely match PDF field names:
+| What You See | What It Actually Is | How to Find Out |
+|--------------|-------------------|-----------------|
+| `VeteransLastName[0]` | Could be spouse name | Check FieldNameAlt: "1C. NAME OF SPOUSE" |
+| `VeteransLastName[1]` | Could be email field | Check FieldNameAlt: "4. E-MAIL ADDRESS" |
+| `DOBmonth[1]` | Could be age field | Check FieldNameAlt: "AGE AT MARRIAGE" |
+| `Daytime1[0]` | Phone area code | Check FieldNameAlt for context |
+
+### Step 5: Use Cursor's Features for QA
+
+#### A. Multi-cursor Editing
+When you have similar fields, use Cursor's multi-cursor (Alt+Click) to edit them simultaneously:
 ```erb
-<%= pdf_field "FieldName", json_data["field_name"] %>
+"form1[0].Page2[0].DOBmonth[0]": "<%= form.data.dig('date', 'month') %>",
+"form1[0].Page2[0].DOBday[0]": "<%= form.data.dig('date', 'day') %>",
+"form1[0].Page2[0].DOByear[0]": "<%= form.data.dig('date', 'year') %>",
 ```
 
-#### Nested Object Access
-For nested JSON structures:
+#### B. Find & Replace with Regex
+Use Cursor's regex search to find patterns:
+- Find: `\[(\d+)\]":`
+- To locate all array indices
+
+#### C. Split View
+1. Split editor vertically
+2. Left: Your ERB file
+3. Right: The keys.txt file with FieldNameAlt
+4. Scroll both simultaneously to verify mappings
+
+### Step 6: Validation Checklist in Cursor
+
+Use Cursor's checkbox feature in markdown preview:
+
+- [ ] **PDF Reviewed**: Opened and understood form structure
+- [ ] **FieldNameAlt Checked**: Every field's true purpose verified
+- [ ] **Character Limits**: Added `&.[](0..max)` where needed
+- [ ] **Radio Buttons**: Using YES/NO/Off, not 1/0
+- [ ] **Conditionals**: Proper if/else blocks for optional sections
+- [ ] **Empty Fields**: Conditional fields have "" when not applicable
+- [ ] **Date Format**: Using `form.signature_date&.strftime()`
+- [ ] **Safe Navigation**: Using `&.` and `dig()` for nil safety
+
+### Step 7: Quick Validation Commands
+
+Open Cursor's terminal and run:
+
+```bash
+# Check ERB syntax
+erb -x -T - output/form_mappings/{form_name}.erb | ruby -c
+
+# View FieldNameAlt descriptions
+grep -n "FieldNameAlt" output/extracted_keys/{form_name}_keys.txt
+
+# Check character limits
+grep -n "FieldMaxLength" output/extracted_keys/{form_name}_keys.txt
+
+# See radio button options
+grep -A2 "FieldType: Button" output/extracted_keys/{form_name}_keys.txt
+```
+
+## Real Example: The Deceptive Field Names
+
+From actual form VBA-21P-0537:
+
 ```erb
-<%= pdf_field "WorkPhone", json_data.dig("contact", "work", "phone") %>
+<%# ❌ WRONG - Trusting the field name %>
+"form1[0].Page2[0].VeteransLastName[0]": "<%= form.data.dig('veteran', 'fullName', 'last') %>",
+
+<%# ✅ CORRECT - Based on FieldNameAlt check %>
+<%# FieldNameAlt: "1C. NAME OF SPOUSE. Enter Last Name." %>
+"form1[0].Page2[0].VeteransLastName[0]": "<%= form.data.dig('remarriage', 'spouseName', 'last') %>",
+
+<%# ❌ WRONG - Assuming it's a date field %>
+"form1[0].Page2[0].DOBmonth[1]": "<%= form.data.dig('some', 'date', 'month') %>",
+
+<%# ✅ CORRECT - It's actually age! %>
+<%# FieldNameAlt: "1G. WHAT WAS YOUR AGE AT THE TIME OF YOUR MARRIAGE?" %>
+"form1[0].Page2[0].DOBmonth[1]": "<%= form.data.dig('remarriage', 'ageAtMarriage') %>",
 ```
 
-#### Conditional Fields
-For optional fields:
+## Cursor Shortcuts for Efficiency
+
+| Action | Shortcut | Use Case |
+|--------|----------|----------|
+| Multi-cursor | Alt+Click | Edit similar fields |
+| Find in file | Cmd/Ctrl+F | Search FieldNameAlt |
+| Replace | Cmd/Ctrl+H | Fix field patterns |
+| Split view | Cmd/Ctrl+\ | View keys + ERB |
+| Format JSON | Shift+Alt+F | Pretty print payload |
+| Toggle comment | Cmd/Ctrl+/ | Add ERB comments |
+
+## Troubleshooting in Cursor
+
+### Issue: "Field mapping seems wrong"
+1. Search for the field in keys.txt
+2. Read the FieldNameAlt description
+3. Check the PDF to confirm
+4. Update your mapping
+
+### Issue: "Radio button not working"
+1. Check FieldStateOption values in keys.txt
+2. Use exact values: YES/NO/Off
+3. Not 1/0 or true/false
+
+### Issue: "Text truncated in PDF"
+1. Find FieldMaxLength in keys.txt
+2. Add substring: `&.[](0..maxlength-1)`
+
+### Issue: "Date not populating"
+1. Check if it's actually a date field (might be age, etc.)
+2. Use `form.signature_date` not `form.data['signatureDate']`
+
+## Final Quality Check
+
+Before saving, use Cursor's search to verify:
+
+1. **Search for field names without comments** - Every field should have a comment explaining its FieldNameAlt purpose
+2. **Search for `]:"` to find all mappings** - Ensure each has proper ERB syntax
+3. **Search for `RadioButtonList`** - Verify YES/NO/Off values
+4. **Search for `<%` and `%>`** - Ensure all ERB tags are balanced
+
+## Pro Tip: Create a Cursor Snippet
+
+Save this as a snippet for quick field mapping:
+
 ```erb
-<% if json_data["is_married"] %>
-  <%= pdf_field "SpouseName", json_data["spouse"]["name"] %>
-<% end %>
+<%# ${1:FieldNameAlt description} %>
+"${2:fieldname}": "<%= form.data.dig(${3:'path', 'to', 'field'}) %>",
 ```
 
-#### Computed Values
-For fields requiring calculation or formatting:
-```erb
-<%= pdf_field "FullName", "#{json_data['first']} #{json_data['last']}" %>
-<%= pdf_field "Age", calculate_age(json_data["birth_date"]) %>
-```
-
-#### Checkboxes and Radio Buttons
-For boolean or choice fields:
-```erb
-<%= pdf_field "HasInsurance", json_data["insured"] ? "Yes" : "No" %>
-<%= pdf_field "MaritalStatus", json_data["marital_status"].capitalize %>
-```
-
-### Step 5: Handle Edge Cases
-
-1. **Missing JSON fields**: Add TODO comments
-   ```erb
-   <%# TODO: No JSON mapping found for PDF field "MiddleName" %>
-   <%= pdf_field "MiddleName", "" %>
-   ```
-
-2. **Array bounds**: Check array size
-   ```erb
-   <% (0..2).each do |i| %>
-     <% if json_data["references"] && json_data["references"][i] %>
-       <%= pdf_field "Reference#{i+1}", json_data["references"][i]["name"] %>
-     <% end %>
-   <% end %>
-   ```
-
-3. **Format conversions**: Document transformations
-   ```erb
-   <%# Format: (123) 456-7890 %>
-   <%= pdf_field "Phone", format_phone(json_data["phone_number"]) %>
-
-   <%# Format: MM/DD/YYYY %>
-   <%= pdf_field "Date", format_date(json_data["date"], "%m/%d/%Y") %>
-   ```
-
-### Step 6: Validate Your Mapping
-
-Checklist:
-- [ ] All PDF fields are mapped or marked as TODO
-- [ ] All relevant JSON data is utilized
-- [ ] Proper nil checking (using `&.`, `dig`, `present?`)
-- [ ] Arrays handled with bounds checking
-- [ ] ERB syntax is valid
-- [ ] Comments explain complex mappings
-
-### Step 7: Save and Document
-
-1. Save file as: `output/form_mappings/{form_name}.erb`
-2. Add a header comment with:
-   - Form name
-   - Date created
-   - Any special notes or TODOs
-
-## Common Patterns Reference
-
-### Date Formatting
-```erb
-<%# From ISO to MM/DD/YYYY %>
-<%= pdf_field "BirthDate", Date.parse(json_data["dob"]).strftime("%m/%d/%Y") rescue "" %>
-```
-
-### Currency Formatting
-```erb
-<%= pdf_field "Salary", "$#{'%.2f' % json_data['salary']}" %>
-```
-
-### Phone Formatting
-```erb
-<%= pdf_field "Phone", json_data["phone"].gsub(/(\d{3})(\d{3})(\d{4})/, '(\1) \2-\3') %>
-```
-
-### Address Concatenation
-```erb
-<%= pdf_field "FullAddress", [
-  json_data["address"]["line1"],
-  json_data["address"]["line2"],
-  "#{json_data["address"]["city"]}, #{json_data["address"]["state"]} #{json_data["address"]["zip"]}"
-].compact.join("\n") %>
-```
-
-## Tips for Cursor Users
-
-1. **Use Multi-cursor**: Edit similar field mappings simultaneously
-2. **Use Find & Replace**: For systematic renaming patterns
-3. **Split View**: Keep JSON and ERB files open side-by-side
-4. **Command Palette**: Use "Format Document" to clean up ERB
-5. **Extensions**: Consider ERB/Ruby extensions for syntax highlighting
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| PDF field not in JSON | Add TODO comment and empty string |
-| JSON field not in PDF | Document in header comment |
-| Complex nested data | Use `dig()` method for safe access |
-| Array index mismatch | Use `.each_with_index` and bounds checking |
-| Date format issues | Use `rescue ""` for parse errors |
-
-## Final Output
-
-Your completed ERB file should:
-1. Map all PDF fields to appropriate JSON data
-2. Handle missing/nil values gracefully
-3. Include helpful comments
-4. Follow ERB best practices
-5. Be saved in `output/form_mappings/`
-
-Remember: The goal is a clean, maintainable ERB template that accurately transforms the JSON payload into PDF form field values.
+Remember: **FieldNameAlt is truth. Field names lie!**

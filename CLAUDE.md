@@ -4,169 +4,207 @@
 
 You will create an ERB form mapping file that maps frontend JSON payload fields to PDF form field keys.
 
+## ⚠️ CRITICAL: Understanding PDF Field Names
+
+**WARNING**: PDF field names are often misleading! The actual field names (like `VeteransLastName[0]`) frequently DO NOT match their actual purpose.
+
+### Always Check FieldNameAlt
+
+The `FieldNameAlt` values in the extracted keys file reveal the TRUE purpose of each field. For example:
+- `VeteransLastName[0]` might actually be for "1C. NAME OF SPOUSE"
+- `VeteransLastName[1]` might actually be for "4. E-MAIL ADDRESS"
+- `DOBmonth[1]` might actually be for "AGE AT MARRIAGE" (not a date!)
+
+**ALWAYS examine the full keys file with FieldNameAlt descriptions:**
+```bash
+cat output/extracted_keys/{form_name}_keys.txt | grep -A1 -B1 "FieldNameAlt"
+```
+
 ## Input Files Location
 
-1. **PDF Field Keys**: `output/extracted_keys/{form_name}_keys_names_only.txt`
-   - Contains the list of PDF form field names
-   - Also check `{form_name}_keys.txt` for full field metadata if needed
+1. **PDF Field Keys with Descriptions**: `output/extracted_keys/{form_name}_keys.txt`
+   - Contains CRITICAL FieldNameAlt descriptions
+   - Also see `{form_name}_keys_names_only.txt` for quick reference
 
 2. **JSON Payload**: `input/payloads/{form_name}.json`
    - Contains the frontend data structure
 
-3. **Example Mappings**: `Example_form_mappings/*.erb`
-   - Reference these for proper ERB syntax and mapping patterns
+3. **PDF Form (Visual Reference)**: `input/pdfs/{form_name}.pdf`
+   - IMPORTANT: View this to understand the form's actual layout
+
+4. **Example Mappings**: `Example_form_mappings/*.erb`
+   - Reference these for proper ERB syntax and patterns
 
 ## Step-by-Step Process
 
-### 1. Analyze the Inputs
+### 1. Analyze the PDF Form Visually
 
-First, read and understand all three inputs:
+**CRITICAL STEP** - Always view the actual PDF first:
 
 ```bash
-# Read the PDF field names
-cat output/extracted_keys/{form_name}_keys_names_only.txt
+# Open the PDF to understand the form structure
+open input/pdfs/{form_name}.pdf
+# Or use any PDF viewer to see the actual form
+```
 
-# Read the JSON payload structure
+Understanding the form's purpose and layout helps you:
+- Identify which JSON fields map to which sections
+- Understand conditional logic (e.g., "If Yes, complete section 2")
+- Spot field relationships and dependencies
+
+### 2. Examine the Extracted Keys with FieldNameAlt
+
+```bash
+# Read the FULL extraction with field descriptions
+cat output/extracted_keys/{form_name}_keys.txt
+
+# Look specifically at FieldNameAlt values
+grep "FieldNameAlt" output/extracted_keys/{form_name}_keys.txt
+
+# Check field types (Text, Button/RadioButton, etc.)
+grep "FieldType" output/extracted_keys/{form_name}_keys.txt
+```
+
+Pay attention to:
+- **FieldNameAlt**: The TRUE purpose of the field
+- **FieldMaxLength**: Character limits for text fields
+- **FieldStateOption**: Valid values for radio buttons (YES/NO/Off)
+- **FieldType**: Button fields are usually radio buttons/checkboxes
+
+### 3. Understand the JSON Payload Structure
+
+```bash
+# Pretty print the JSON for better readability
+cat input/payloads/{form_name}.json | python -m json.tool
+
+# Or examine with jq if available
+jq . input/payloads/{form_name}.json
+```
+
+### 4. Study Example Patterns
+
+Review examples for common patterns:
+
+```bash
+# Look at how other forms handle similar structures
+grep -n "form.data" Example_form_mappings/*.erb
+
+# Check radio button handling
+grep -n "RadioButtonList" Example_form_mappings/*.erb
+
+# See date formatting patterns
+grep -n "strftime" Example_form_mappings/*.erb
+```
+
+### 5. Generate the ERB Mapping
+
+Create the mapping file following these best practices:
+
+```erb
+{
+  <%# Form: {Form Number} - {Form Title} %>
+  <%# Generated: {Date} %>
+  <%# IMPORTANT: Field names may not match their purpose - check FieldNameAlt! %>
+
+  <%# ============================================ %>
+  <%# Section Name (from PDF form) %>
+  <%# ============================================ %>
+
+  <%# Actual field purpose from FieldNameAlt %>
+  "fieldname[0]": "<%= form.data.dig('json', 'path') %>",
+
+  <%# Conditional fields - only populate when conditions are met %>
+  <% if form.data['some_condition'] %>
+    "fieldname[1]": "<%= form.data.dig('nested', 'value') %>",
+  <% else %>
+    "fieldname[1]": "",
+  <% end %>
+
+  <%# Radio buttons - use actual state options %>
+  "RadioButtonList[0]": "<%= condition ? 'YES' : 'NO' %>",
+
+  <%# Character-limited fields %>
+  "EmailField[0]": "<%= form.data['email']&.[](0..29) %>",
+
+  <%# Date fields - check if form.signature_date is available %>
+  "DateMonth[0]": "<%= form.signature_date&.strftime('%m') %>",
+}
+```
+
+### 6. Common Pitfalls to Avoid
+
+1. **Trusting Field Names**: NEVER assume `VeteransLastName` is for veteran's last name
+2. **Missing Character Limits**: Always check and respect FieldMaxLength
+3. **Wrong Radio Button Values**: Use YES/NO/Off, not 1/0
+4. **Date Format Confusion**: Some "date" fields might be single values (like age)
+5. **Ignoring Conditionals**: Check if fields should only populate under certain conditions
+
+### 7. Quality Assurance Checklist
+
+Before finalizing your mapping:
+
+#### A. Field Name Verification
+- [ ] Checked ALL FieldNameAlt descriptions
+- [ ] Verified field purposes match JSON data being mapped
+- [ ] Confirmed field indices are correct (e.g., [0] vs [1])
+
+#### B. Data Validation
+- [ ] Character limits enforced with `&.[](0..max)`
+- [ ] Radio buttons use correct state options (YES/NO/Off)
+- [ ] Conditional logic matches form requirements
+- [ ] Empty strings for unpopulated conditional fields
+
+#### C. Cross-Reference Check
+- [ ] Compared with actual PDF form visually
+- [ ] Verified all JSON fields are utilized appropriately
+- [ ] Checked that all required PDF fields are mapped
+
+#### D. ERB Syntax
+- [ ] Valid ERB tags (`<%` and `%>`)
+- [ ] Proper use of `dig()` for nested data
+- [ ] Safe navigation with `&.` for potentially nil values
+- [ ] Correct use of `present?` for conditional checks
+
+### 8. Final QA Process
+
+Run through this comprehensive QA:
+
+```bash
+# 1. Review the complete field extraction
+cat output/extracted_keys/{form_name}_keys.txt
+
+# 2. Verify your JSON payload structure
 cat input/payloads/{form_name}.json
 
-# Examine an example mapping
-cat Example_form_mappings/*.erb
-```
+# 3. Open and review the actual PDF
+open input/pdfs/{form_name}.pdf
 
-### 2. Identify Mapping Patterns
+# 4. Check your ERB for syntax
+erb -x -T - output/form_mappings/{form_name}.erb | ruby -c
 
-Look for patterns between JSON fields and PDF keys:
-- Direct name matches (e.g., `first_name` → `FirstName`)
-- Semantic matches (e.g., `ssn` → `SocialSecurityNumber`)
-- Nested JSON paths (e.g., `address.street` → `StreetAddress`)
-- Array handling (e.g., `dependents[0].name` → `Dependent1Name`)
-
-### 3. Generate the ERB Mapping
-
-Create the mapping file following these conventions:
-
-```erb
-<%# Form Mapping: {Form Name} %>
-<%# Generated: {Date} %>
-
-<%# Basic field mapping %>
-<%= pdf_field "PDFFieldName", json_data["json_field"] %>
-
-<%# Nested object mapping %>
-<%= pdf_field "Address", json_data.dig("contact", "address", "street") %>
-
-<%# Conditional mapping %>
-<% if json_data["has_spouse"] %>
-  <%= pdf_field "SpouseName", json_data["spouse_name"] %>
-<% end %>
-
-<%# Array/list handling %>
-<% json_data["children"]&.each_with_index do |child, index| %>
-  <%= pdf_field "Child#{index + 1}Name", child["name"] %>
-  <%= pdf_field "Child#{index + 1}Age", child["age"] %>
-<% end %>
-
-<%# Computed/transformed values %>
-<%= pdf_field "FullName", "#{json_data['first_name']} #{json_data['last_name']}" %>
-
-<%# Checkbox handling %>
-<%= pdf_field "IsEmployed", json_data["employed"] ? "Yes" : "No" %>
-```
-
-### 4. Common Mapping Patterns
-
-#### Date Formatting
-```erb
-<%= pdf_field "DateOfBirth", format_date(json_data["dob"]) %>
-```
-
-#### Phone Number Formatting
-```erb
-<%= pdf_field "PhoneNumber", format_phone(json_data["phone"]) %>
-```
-
-#### Currency/Number Formatting
-```erb
-<%= pdf_field "AnnualIncome", number_to_currency(json_data["income"]) %>
-```
-
-#### Address Components
-```erb
-<%= pdf_field "FullAddress", [
-  json_data.dig("address", "street"),
-  json_data.dig("address", "city"),
-  json_data.dig("address", "state"),
-  json_data.dig("address", "zip")
-].compact.join(", ") %>
-```
-
-### 5. Validation Checklist
-
-Before saving the mapping file, ensure:
-
-- [ ] All PDF fields have been addressed (mapped or intentionally skipped)
-- [ ] All relevant JSON data is being used
-- [ ] Proper nil/null handling with `&.` and `dig()`
-- [ ] Arrays and nested objects are properly handled
-- [ ] Date/time/currency formatting is applied where needed
-- [ ] ERB syntax is valid (proper `<%` and `%>` tags)
-
-### 6. Output Location
-
-Save the generated mapping file to:
-```
-output/form_mappings/{form_name}.erb
-```
-
-## Example Command Sequence
-
-```bash
-# 1. Check what forms are available
-ls input/pdfs/
-ls input/payloads/
-
-# 2. Read the extracted keys
-cat output/extracted_keys/tax_form_keys_names_only.txt
-
-# 3. Read the JSON payload
-cat input/payloads/tax_form.json
-
-# 4. Look at examples
+# 5. Compare with similar forms
 ls Example_form_mappings/
-cat Example_form_mappings/example1.erb
-
-# 5. Create the mapping
-# [Generate the ERB content based on analysis]
-
-# 6. Save to output
-# Write to output/form_mappings/tax_form.erb
 ```
 
-## Special Considerations
+## Example: Field Name Mismatch
 
-1. **Missing Fields**: If a PDF field has no corresponding JSON data, add a comment:
-   ```erb
-   <%# TODO: No JSON field found for PDF field "MiddleInitial" %>
-   ```
+Here's a real example from form VBA-21P-0537:
 
-2. **Complex Transformations**: Document any complex logic:
-   ```erb
-   <%# Calculate total income from multiple sources %>
-   <% total_income = json_data["salary"] + json_data["bonuses"] + json_data["other_income"] %>
-   <%= pdf_field "TotalIncome", total_income %>
-   ```
+```erb
+<%# WRONG - Based on field name assumption %>
+"form1[0].Page2[0].VeteransLastName[0]": "<%= form.data.dig('veteran', 'fullName', 'last') %>",
 
-3. **Validation Notes**: Add comments for fields requiring validation:
-   ```erb
-   <%# NOTE: SSN format should be validated before mapping %>
-   <%= pdf_field "SSN", format_ssn(json_data["social_security_number"]) %>
-   ```
+<%# CORRECT - Based on FieldNameAlt: "1C. NAME OF SPOUSE" %>
+"form1[0].Page2[0].VeteransLastName[0]": "<%= form.data.dig('remarriage', 'spouseName', 'last') %>",
+```
 
 ## Getting Help
 
-If you encounter:
-- Ambiguous mappings: Check the example files for similar patterns
-- Missing data: Document it with a TODO comment
-- Complex transformations: Break them down into helper methods
+If you encounter issues:
+1. **Always check FieldNameAlt first** - The field name is probably misleading
+2. **View the PDF** - Visual context clarifies field purposes
+3. **Check field limits** - Respect MaxLength constraints
+4. **Test with different payload scenarios** - Ensure conditionals work
+5. **Reference examples** - Similar patterns likely exist
 
-Remember: The goal is to create a maintainable, readable ERB file that accurately maps the frontend data to the PDF form fields.
+Remember: The FieldNameAlt is your source of truth, not the field name!

@@ -1,8 +1,12 @@
-# Complete Workflow Example
+# Complete Workflow Example with Quality Assurance
 
-This document walks through a complete example of processing a form from PDF to ERB mapping.
+This document walks through a complete example of processing a form from PDF to ERB mapping, with emphasis on proper QA procedures.
 
-## Example: Processing a Tax Form
+## ⚠️ Critical Lesson Learned
+
+**PDF field names are misleading!** The field `VeteransLastName[0]` might actually be for spouse's name, email, or something else entirely. Always check `FieldNameAlt` descriptions in the extracted keys file.
+
+## Complete Workflow: Processing a Tax Form
 
 ### Step 1: Prepare Your Files
 
@@ -33,128 +37,248 @@ Processing: input/pdfs/tax_form_2024.pdf
   Found 47 form fields
 ```
 
-### Step 3: Verify Extracted Keys
+### Step 3: CRITICAL - Review the PDF Visually
 
-Check what was extracted:
-
-```bash
-# View just the field names
-cat output/extracted_keys/tax_form_2024_keys_names_only.txt
-
-# Sample output:
-# FirstName
-# LastName
-# SSN
-# FilingStatus
-# SpouseName
-# DependentName1
-# DependentSSN1
-# ...
-```
-
-### Step 4: Review JSON Payload Structure
+**DO NOT SKIP THIS STEP!**
 
 ```bash
-cat input/payloads/tax_form_2024.json
-
-# Sample structure:
-# {
-#   "taxpayer": {
-#     "first_name": "John",
-#     "last_name": "Doe",
-#     "ssn": "123-45-6789",
-#     "filing_status": "married_filing_jointly"
-#   },
-#   "spouse": {
-#     "first_name": "Jane",
-#     "last_name": "Doe",
-#     "ssn": "987-65-4321"
-#   },
-#   "dependents": [
-#     {
-#       "name": "Jack Doe",
-#       "ssn": "111-22-3333",
-#       "relationship": "son"
-#     }
-#   ]
-# }
+# Open the PDF to understand the form
+open input/pdfs/tax_form_2024.pdf
 ```
 
-### Step 5: Use AI Agent to Generate Mapping
+Look for:
+- Form sections and their order
+- Conditional fields ("If yes, complete section...")
+- Field relationships
+- Required vs optional fields
+
+### Step 4: Examine Extracted Keys with FieldNameAlt
+
+**This is the most important step for accurate mapping:**
+
+```bash
+# View the complete extraction with field descriptions
+cat output/extracted_keys/tax_form_2024_keys.txt
+
+# Focus on FieldNameAlt descriptions
+grep -B2 -A2 "FieldNameAlt" output/extracted_keys/tax_form_2024_keys.txt
+```
+
+Example discovery:
+```
+FieldName: form1[0].Page2[0].VeteransLastName[0]
+FieldNameAlt: 1C. NAME OF SPOUSE. Enter Last Name.
+---
+FieldName: form1[0].Page2[0].VeteransLastName[1]
+FieldNameAlt: 4. E-MAIL ADDRESS.
+---
+FieldName: form1[0].Page2[0].DOBmonth[1]
+FieldNameAlt: 1G. WHAT WAS YOUR AGE AT THE TIME OF YOUR MARRIAGE?
+```
+
+### Step 5: Review JSON Payload Structure
+
+```bash
+# Pretty print the JSON
+cat input/payloads/tax_form_2024.json | python -m json.tool
+
+# Or with jq for better visualization
+jq . input/payloads/tax_form_2024.json
+```
+
+### Step 6: Use AI Agent to Generate Initial Mapping
 
 #### Option A: Using Claude Code
 
 1. Open terminal in the project directory
 2. Run: `claude`
-3. Give this prompt:
+3. Give this comprehensive prompt:
 
 ```
 Please create an ERB form mapping for tax_form_2024.
-- The PDF field names are in output/extracted_keys/tax_form_2024_keys_names_only.txt
-- The JSON payload is in input/payloads/tax_form_2024.json
-- Reference the examples in Example_form_mappings/
-- Save the result to output/form_mappings/tax_form_2024.erb
+
+CRITICAL REQUIREMENTS:
+1. Check FieldNameAlt descriptions in output/extracted_keys/tax_form_2024_keys.txt
+   - DO NOT trust field names like VeteransLastName[0]
+2. Review the actual PDF at input/pdfs/tax_form_2024.pdf to understand form structure
+3. Map fields from input/payloads/tax_form_2024.json
+4. Reference examples in Example_form_mappings/ for ERB syntax
+5. Enforce character limits found in FieldMaxLength
+6. Use YES/NO/Off for radio buttons, not 1/0
+7. Handle conditional fields properly
+8. Save to output/form_mappings/tax_form_2024.erb
+
+Remember: FieldNameAlt tells you the REAL purpose of each field!
 ```
 
 #### Option B: Using Cursor
 
 1. Open the project in Cursor
-2. Open the relevant files in tabs:
-   - `output/extracted_keys/tax_form_2024_keys_names_only.txt`
+2. Open these files in tabs:
+   - `output/extracted_keys/tax_form_2024_keys.txt` (CRITICAL!)
    - `input/payloads/tax_form_2024.json`
+   - `input/pdfs/tax_form_2024.pdf` (in external viewer)
    - An example from `Example_form_mappings/`
-3. Create new file: `output/form_mappings/tax_form_2024.erb`
-4. Use Cursor's AI to help generate the mappings
+3. Create: `output/form_mappings/tax_form_2024.erb`
+4. Use Cursor's AI with the requirements above
 
-### Step 6: Verify the Generated Mapping
+### Step 7: MANDATORY Quality Assurance Process
 
-The AI should produce something like:
+**Never skip QA! Field name confusion is the #1 source of errors.**
+
+#### 7.1 Field Purpose Verification
+
+For EVERY field in your ERB:
+
+```bash
+# Check what each field REALLY is
+grep -A3 "form1\[0\]\.Page2\[0\]\.VeteransLastName\[0\]" output/extracted_keys/tax_form_2024_keys.txt
+```
+
+Verify:
+- FieldNameAlt matches your JSON mapping
+- You're not mapping veteran data to spouse fields
+- Email fields aren't being used for names
+
+#### 7.2 Character Limit Validation
+
+```bash
+# Find all character limits
+grep "FieldMaxLength" output/extracted_keys/tax_form_2024_keys.txt
+
+# Verify your ERB enforces them
+grep "\.\.\[0\.\." output/form_mappings/tax_form_2024.erb
+```
+
+#### 7.3 Radio Button Verification
+
+```bash
+# Find all radio buttons and their valid values
+grep -A4 "FieldType: Button" output/extracted_keys/tax_form_2024_keys.txt
+
+# Check your mappings use correct values
+grep "RadioButtonList" output/form_mappings/tax_form_2024.erb
+```
+
+Should see: `'YES'`, `'NO'`, `'Off'` (not 1/0)
+
+#### 7.4 Conditional Logic Check
+
+Review sections that should only populate under certain conditions:
 
 ```erb
-<%# Form: Tax Form 2024 %>
-<%# Generated: 2024-01-15 %>
-<%# Maps taxpayer JSON data to IRS PDF form fields %>
-
-<%# Taxpayer Information %>
-<%= pdf_field "FirstName", json_data.dig("taxpayer", "first_name") %>
-<%= pdf_field "LastName", json_data.dig("taxpayer", "last_name") %>
-<%= pdf_field "SSN", json_data.dig("taxpayer", "ssn").gsub("-", "") %>
-
-<%# Filing Status %>
-<% case json_data.dig("taxpayer", "filing_status") %>
-<% when "single" %>
-  <%= pdf_field "FilingStatus", "1" %>
-<% when "married_filing_jointly" %>
-  <%= pdf_field "FilingStatus", "2" %>
-<% when "married_filing_separately" %>
-  <%= pdf_field "FilingStatus", "3" %>
+# Good - conditional population
+<% if form.data['hasSpouse'] %>
+  "SpouseSSN[0]": "<%= form.data.dig('spouse', 'ssn') %>",
+<% else %>
+  "SpouseSSN[0]": "",
 <% end %>
 
-<%# Spouse Information (if applicable) %>
-<% if json_data["spouse"].present? %>
-  <%= pdf_field "SpouseName", "#{json_data.dig("spouse", "first_name")} #{json_data.dig("spouse", "last_name")}" %>
-  <%= pdf_field "SpouseSSN", json_data.dig("spouse", "ssn").gsub("-", "") %>
-<% end %>
+# Bad - always populates
+"SpouseSSN[0]": "<%= form.data.dig('spouse', 'ssn') %>",
+```
 
-<%# Dependents %>
-<% (json_data["dependents"] || []).each_with_index do |dependent, index| %>
-  <% break if index >= 4 %> <%# PDF only has 4 dependent fields %>
-  <%= pdf_field "DependentName#{index + 1}", dependent["name"] %>
-  <%= pdf_field "DependentSSN#{index + 1}", dependent["ssn"].gsub("-", "") %>
-  <%= pdf_field "DependentRelationship#{index + 1}", dependent["relationship"] %>
+#### 7.5 Cross-Reference with PDF
+
+Open the PDF and ERB side-by-side:
+1. For each PDF section, find corresponding ERB section
+2. Verify field order matches
+3. Check that conditional instructions are followed
+
+### Step 8: Test with Different Scenarios
+
+Create test payloads for edge cases:
+
+```bash
+# Test with minimal data
+cp input/payloads/tax_form_2024.json input/payloads/test_minimal.json
+# Edit to remove optional fields
+
+# Test with all fields populated
+cp input/payloads/tax_form_2024.json input/payloads/test_complete.json
+# Edit to include all possible fields
+
+# Test with different conditional branches
+cp input/payloads/tax_form_2024.json input/payloads/test_unmarried.json
+# Edit hasSpouse: false
+```
+
+### Step 9: Final Verification Checklist
+
+Run through this checklist for EVERY form:
+
+- [ ] **PDF Reviewed**: Visually examined the actual PDF form
+- [ ] **FieldNameAlt Verified**: Every field's true purpose confirmed
+- [ ] **Character Limits**: All MaxLength constraints enforced
+- [ ] **Radio Buttons**: Using YES/NO/Off values from FieldStateOption
+- [ ] **Conditionals**: Proper if/else blocks for optional sections
+- [ ] **Empty Defaults**: Conditional fields have "" when not applicable
+- [ ] **Date Handling**: Using form.signature_date&.strftime() where appropriate
+- [ ] **Safe Navigation**: Using &. and dig() for nil safety
+- [ ] **Comments**: Every field has comment showing FieldNameAlt
+- [ ] **ERB Syntax**: Valid and properly formatted
+
+## Common Issues and Solutions
+
+### Issue: "Veteran fields mapping to wrong person"
+
+**Symptom**: Veteran data appearing in spouse fields or vice versa
+
+**Solution**:
+```bash
+# Check the actual purpose
+grep "VeteransLastName" output/extracted_keys/form_keys.txt
+# Look at FieldNameAlt - it might say "SPOUSE NAME"!
+```
+
+### Issue: "Radio buttons showing as numbers"
+
+**Symptom**: PDF shows 1/0 instead of checked boxes
+
+**Solution**:
+```bash
+# Find valid options
+grep -A3 "RadioButtonList\[0\]" output/extracted_keys/form_keys.txt
+# Look for FieldStateOption: YES, NO, Off
+```
+
+Use exactly those values:
+```erb
+"RadioButtonList[0]": "<%= form.data['married'] ? 'YES' : 'NO' %>",
+```
+
+### Issue: "Text cut off in PDF fields"
+
+**Symptom**: Data truncated in generated PDF
+
+**Solution**:
+```bash
+# Find the limit
+grep "YourFieldName" -A5 output/extracted_keys/form_keys.txt
+# Look for FieldMaxLength: 18
+```
+
+Enforce in ERB:
+```erb
+"FieldName[0]": "<%= form.data['name']&.[](0..17) %>", <%# Max 18 chars %>
+```
+
+### Issue: "Fields populated when they shouldn't be"
+
+**Symptom**: Conditional fields always have data
+
+**Solution**: Add proper conditional blocks:
+```erb
+<% if form.data['hasCondition'] %>
+  "ConditionalField[0]": "<%= form.data['conditionalData'] %>",
+<% else %>
+  "ConditionalField[0]": "",
 <% end %>
 ```
 
-### Step 7: Test and Refine
+## Batch Processing Multiple Forms
 
-1. Review the generated ERB file
-2. Check that all PDF fields are mapped
-3. Verify data transformations are correct
-4. Add any missing mappings or TODO comments
-
-## Batch Processing
-
-To process multiple forms at once:
+To process multiple forms efficiently:
 
 ```bash
 # 1. Place all PDFs and JSONs
@@ -164,48 +288,57 @@ ls input/pdfs/
 ls input/payloads/
 # form1.json  form2.json  form3.json
 
-# 2. Extract all keys
+# 2. Extract all keys at once
 ./scripts/extract_pdf_keys.sh --all
 
-# 3. Use AI agent with a batch prompt:
-# "Please generate ERB mappings for all forms that have both
-#  extracted keys and JSON payloads available"
+# 3. Process each with proper QA
+for form in form1 form2 form3; do
+  echo "Processing $form..."
+
+  # View the PDF
+  echo "Step 1: Review PDF at input/pdfs/${form}.pdf"
+
+  # Check FieldNameAlt
+  echo "Step 2: Checking field descriptions..."
+  grep "FieldNameAlt" output/extracted_keys/${form}_keys.txt | head -20
+
+  # Generate mapping with AI agent
+  echo "Step 3: Generate ERB mapping..."
+  # Use Claude or Cursor with comprehensive prompt
+
+  # QA verification
+  echo "Step 4: Running QA checks..."
+  # Run all QA steps listed above
+done
 ```
 
-## Validation Checklist
+## Red Flags That Require Investigation
 
-Before considering a mapping complete:
+If you see any of these, STOP and investigate:
 
-- [ ] PDF file processed successfully
-- [ ] JSON payload is valid and complete
-- [ ] All PDF fields have mappings or TODOs
-- [ ] Data transformations are tested
-- [ ] ERB syntax is valid
-- [ ] File saved in correct location
-- [ ] Complex logic is documented
+1. **Field name doesn't match content**:
+   - `VeteransName` being used for non-veteran data
+   - `DOB` fields used for non-date values
 
-## Common Issues and Solutions
+2. **Suspicious array indices**:
+   - Same field name with different indices having unrelated purposes
+   - `[0]` and `[1]` of same field doing completely different things
 
-| Issue | Solution |
-|-------|----------|
-| PDF has no form fields | Ensure PDF is fillable, not just a scanned document |
-| Field names don't match | Create a mapping table in comments |
-| Nested JSON too deep | Use `dig()` method with multiple parameters |
-| Array sizes don't match | Add bounds checking in ERB |
-| Special characters in data | Add sanitization/escaping methods |
+3. **Character limits being ignored**:
+   - No `&.[](0..max)` substring operations
+   - Long strings going into limited fields
 
-## Next Steps
-
-Once you have your ERB mapping file:
-
-1. Test it with actual data
-2. Integrate it into your application's PDF generation pipeline
-3. Add validation and error handling as needed
-4. Document any custom transformations
+4. **Radio buttons with wrong values**:
+   - Using 1/0, true/false instead of YES/NO/Off
+   - Not checking FieldStateOption values
 
 ## Getting Help
 
-- Check `CLAUDE.md` for Claude-specific instructions
-- Check `CURSOR.md` for Cursor-specific instructions
-- Review `Example_form_mappings/` for more patterns
-- Verify PDFtk installation if extraction fails
+- **Always check FieldNameAlt first** - It's the source of truth
+- **View the PDF** - Visual context prevents many errors
+- **Review examples** - Pattern matching helps
+- **Test edge cases** - Empty/full/conditional scenarios
+
+## Key Takeaway
+
+**Never trust field names!** Always verify with FieldNameAlt descriptions. A few extra minutes of QA prevents hours of debugging later.
