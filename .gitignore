@@ -1,0 +1,22 @@
+# Input files (keep folders, ignore contents)
+input/pdfs/*
+!input/pdfs/.gitkeep
+input/payloads/*
+!input/payloads/.gitkeep
+
+# Output files (keep folders, ignore contents)
+output/extracted_keys/*
+!output/extracted_keys/.gitkeep
+output/form_mappings/*
+!output/form_mappings/.gitkeep
+
+# OS files
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE files
+.idea/
+.vscode/
+*.iml
