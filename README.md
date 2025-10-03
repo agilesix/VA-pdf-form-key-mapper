@@ -90,3 +90,7 @@ See [CURSOR.md](CURSOR.md) for detailed instructions on using Cursor to generate
 - **pdftk not found**: Install pdftk using the commands in Prerequisites
 - **No form fields found**: The PDF may not have fillable form fields
 - **Permission denied**: Run `chmod +x scripts/extract_pdf_keys.sh`
+- **camelCase violations**: ERB templates must use snake_case, not camelCase from JSON payloads
+  - Run validation: `ruby scripts/validate_snake_case.rb output/form_mappings/your_form.erb`
+  - The vets-api backend automatically converts JSON keys from camelCase to snake_case
+  - See [CLAUDE.md](CLAUDE.md) section 3.5 for conversion rules and examples

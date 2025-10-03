@@ -84,6 +84,95 @@ cat input/payloads/{form_name}.json | python -m json.tool
 jq . input/payloads/{form_name}.json
 ```
 
+### 3.5. ⚠️ CRITICAL: Handle CamelCase to snake_case Conversion
+
+**IMPORTANT**: The vets-api backend automatically converts JSON keys from camelCase (frontend convention) to snake_case (Ruby/Rails convention).
+
+**Your ERB templates MUST use snake_case, NOT the camelCase you see in the JSON payload!**
+
+#### Why This Matters
+
+The frontend sends JSON with camelCase keys:
+```json
+{
+  "veteran": {
+    "fullName": { "first": "John" },
+    "vaFileNumber": "123456789",
+    "dateOfBirth": { "month": "01", "day": "15", "year": "1980" }
+  }
+}
+```
+
+But vets-api automatically transforms it to snake_case before the ERB template sees it:
+```ruby
+{
+  "veteran" => {
+    "full_name" => { "first" => "John" },
+    "va_file_number" => "123456789",
+    "date_of_birth" => { "month" => "01", "day" => "15", "year" => "1980" }
+  }
+}
+```
+
+#### Conversion Rules
+
+**Multi-word keys get converted:**
+- `fullName` → `full_name`
+- `vaFileNumber` → `va_file_number`
+- `dateOfBirth` → `date_of_birth`
+- `dateOfDeath` → `date_of_death`
+- `isVeteran` → `is_veteran`
+- `zipCode` → `zip_code`
+- `areaCode` → `area_code`
+- `lineNumber` → `line_number`
+- `survivingRelatives` → `surviving_relatives`
+- `hasSpouse` → `has_spouse`
+- `hasChildren` → `has_children`
+- `relationshipToDeceased` → `relationship_to_deceased`
+- `expensesList` → `expenses_list`
+- `otherDebts` → `other_debts`
+- `expenseType` → `expense_type`
+- `isPaid` → `is_paid`
+- `paidBy` → `paid_by`
+- `signatureDate` → `signature_date`
+
+**Single-word keys remain unchanged:**
+- `veteran`, `beneficiary`, `claimant`, `address`, `phone`, `email`
+- `first`, `middle`, `last`, `month`, `day`, `year`
+- `street`, `city`, `state`, `country`
+
+#### Example Comparison
+
+❌ **WRONG** (using camelCase from JSON):
+```erb
+"form1[0].#subform[2].VeteransFirstName[0]": "<%= form.data.dig('veteran', 'fullName', 'first') %>",
+"form1[0].#subform[2].VAFileNumber[0]": "<%= form.data.dig('veteran', 'vaFileNumber') %>",
+"form1[0].#subform[2].ClaimantsCurrentMailingAddress_ZIPOrPostalCode_FirstFiveNumbers[0]": "<%= form.data.dig('claimant', 'address', 'zipCode', 'first5') %>",
+```
+
+✅ **CORRECT** (using snake_case for ERB):
+```erb
+"form1[0].#subform[2].VeteransFirstName[0]": "<%= form.data.dig('veteran', 'full_name', 'first') %>",
+"form1[0].#subform[2].VAFileNumber[0]": "<%= form.data.dig('veteran', 'va_file_number') %>",
+"form1[0].#subform[2].ClaimantsCurrentMailingAddress_ZIPOrPostalCode_FirstFiveNumbers[0]": "<%= form.data.dig('claimant', 'address', 'zip_code', 'first5') %>",
+```
+
+#### Golden Reference
+
+**See `Example_form_mappings/vba_21p_601.json.erb` as the corrected golden example** that uses proper snake_case throughout.
+
+#### Conversion Algorithm
+
+When you see a camelCase key in the JSON:
+1. Find word boundaries (lowercase followed by uppercase)
+2. Insert underscore before each boundary
+3. Convert entire string to lowercase
+
+Examples:
+- `fullName` → `full` + `_` + `name` → `full_name`
+- `vaFileNumber` → `va` + `_` + `file` + `_` + `number` → `va_file_number`
+- `isVeteran` → `is` + `_` + `veteran` → `is_veteran`
+
 ### 4. Study ALL Example Patterns (MANDATORY)
 
 **You MUST review ALL three example files** to understand the correct patterns:
@@ -189,6 +278,9 @@ Before finalizing your mapping:
 Run through this comprehensive QA:
 
 ```bash
+# 0. MANDATORY: Validate snake_case (run this FIRST!)
+ruby scripts/validate_snake_case.rb output/form_mappings/{form_name}.erb
+
 # 1. Review the complete field extraction
 cat output/extracted_keys/{form_name}_keys.txt
 
@@ -204,6 +296,8 @@ erb -x -T - output/form_mappings/{form_name}.erb | ruby -c
 # 5. Compare with similar forms
 ls Example_form_mappings/
 ```
+
+**IMPORTANT**: The snake_case validation (step 0) is MANDATORY and must pass before proceeding. If it fails, fix all camelCase violations and re-run the validator.
 
 ## Example: Field Name Mismatch
 

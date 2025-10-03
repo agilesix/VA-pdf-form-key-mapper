@@ -134,6 +134,29 @@ Remember: FieldNameAlt tells you the REAL purpose of each field!
 
 **Never skip QA! Field name confusion is the #1 source of errors.**
 
+#### 7.0 Snake Case Validation (MANDATORY FIRST STEP)
+
+**This MUST be the first check you run - before ANY other QA steps!**
+
+The vets-api backend automatically converts JSON keys from camelCase (frontend convention) to snake_case (Ruby/Rails convention). Your ERB templates MUST use snake_case.
+
+```bash
+# MANDATORY: Run snake_case validation FIRST
+ruby scripts/validate_snake_case.rb output/form_mappings/tax_form_2024.erb
+```
+
+If this validation fails, you MUST fix all camelCase violations before proceeding with any other QA steps.
+
+**Common conversions:**
+- `fullName` → `full_name`
+- `vaFileNumber` → `va_file_number`
+- `dateOfBirth` → `date_of_birth`
+- `zipCode` → `zip_code`
+
+See CLAUDE.md Section 3.5 for complete conversion rules and examples.
+
+**Golden reference**: `Example_form_mappings/vba_21p_601.json.erb` shows proper snake_case usage throughout.
+
 #### 7.1 Field Purpose Verification
 
 For EVERY field in your ERB:
